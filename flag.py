@@ -48,8 +48,9 @@ images = {  # image IDs must be letter strings
 }
 
 ## Set the ID for the flag and the courses this flag is part of
-MY_ID = 'A'   # must be key in list of images and unique across all flags
+MY_ID = 'A'  # must be key in list of images and unique across all flags
 MY_COURSES = ['1','2','5']  # must be a list of single digits
+MY_TYPE = 'F'  # must be F to indicate 'F'lag
 
 ## create a list that will track the visitors in the order they arrive
 visitors = []
@@ -74,6 +75,8 @@ while True:
     if button_a.is_pressed():
       mode = "visitors"
       display.clear()
+      ## pause code briefly to allow for reaction time between button presses
+      sleep(600)
     ## otherwise, we begin transmission/receiving of data
     else:
       ## when in flag mode, we display the flag's identity so it is visible
@@ -85,33 +88,42 @@ while True:
       ## separately.
       for course in MY_COURSES:
         ## construct the message to be sent, using the current course and the
-        ## flag ID.  Send it using the radio protocol.
-        radio.send(course+MY_ID)
+        ## flag ID prepended by 'F' to indicate this is a 'F'lag message.
+        ## Send it using the radio protocol.
+        radio.send(MY_TYPE+course+MY_ID)
         ## attempt to catch any receiving message from a visitor if they are
         ## on the correct course.
-        visitor = radio.receive()
-        if visitor:
-          ## if the visitor sent a response, check to see which course it is on
-          ## by extracting the first character of its message
-          visitor_course = visitor[0]
-          ## if the visitor is on one of the courses the flag is on...
-          if visitor_course in MY_COURSES:
-            ## and if the visitor hasn't already visited this flag on this
-            ## course
-            if visitor not in visitors:
-              ## add the visitor to the list of visitors.  Note we store the
-              ## whole message including the course number, since a visitor
-              ## may visit the flag multiple times for different courses and
-              ## we need to be able to distinguish between them.
-              visitors.append(visitor)
+        message = radio.receive()
+        if message:
+          ## first, check the message is from a compass
+          message_type = message[0]
+          if message_type == 'C':              
+            ## now check to see which course it is on
+            ## by extracting the second character of its message
+            visitor_course = message[1]
+            ## if the visitor is on one of the courses the flag is on...
+            if visitor_course in MY_COURSES:
+              ## get their information from the message, which is everything
+              ## from the second character (index 1) onwards
+              visitor_info = message[1:]
+              ## and if the visitor hasn't already visited this flag on this
+              ## course
+              if visitor_info not in visitors:
+                ## add the visitor to the list of visitors.  Note we store the
+                ## whole message including the course number, since a visitor
+                ## may visit the flag multiple times for different courses and
+                ## we need to be able to distinguish between them.
+                visitors.append(visitor_info)
         ## pause code execution for a short time between each transmission
-        sleep(600)
-  ## visitors mode displays the visitors from the selectec course
+        sleep(100)
+        
+  ## visitors mode displays the visitors from the selected course
   elif mode == "visitors":
     ## we need to identify which course to display.  By default, we'll extract
     ## the course id that appears first in the list of courses.  This always
     ## has an index of 0.
     course_to_view = 0 # index of course to display
+    display.show(MY_COURSES[course_to_view])
     ## while in this mode, we'll continuously wait for a button press.  We can
     ## do this with an infinite loop, which we'll break from when we return
     ## to flag mode
@@ -123,11 +135,11 @@ while True:
       if button_b.is_pressed():
         course_to_view += 1
         ## if the index stored in course_to_view ever gets to the length of the
-        ## lst, it has gone too far and should be set to 0 (the start) instead.
+        ## list, it has gone too far and should be set to 0 (the start) instead.
         if course_to_view >= len(MY_COURSES):
           course_to_view = 0
-        ## Show which course is currently selected on the micro:bit display
-        display.show(MY_COURSES[0])
+        display.show(MY_COURSES[course_to_view])
+        ## pause for button reaction time
         sleep(600)
       ## button A will be used to show the visitors for the selected course
       if button_a.is_pressed():
@@ -139,7 +151,7 @@ while True:
           visitor_course = v[0]
           ## compare the visitors course with the chosen course and, if they
           ## match, we'll display the visitor's id
-          if visitor_course == course_to_view:
+          if visitor_course == MY_COURSES[course_to_view]:
             ## the data stored includes the course as the first character in the
             ## data string, so the visitor's id is everything from the second
             ## character (the character at index 1) through to the end.  Extract
@@ -153,4 +165,5 @@ while True:
         ## switch to flag mode and exit this loop to revert to the main loop
         display.clear()
         mode = "flag"
+        sleep(600)
         break

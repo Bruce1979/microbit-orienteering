@@ -48,30 +48,31 @@ images = {  # image IDs must be letter strings
 ## Set the ID for the compass and the course it is currently completing
 MY_ID = 'BLUE'   # must be unique across all compasses participating
 MY_COURSE = '1'  # must be a single digit
+MY_TYPE = 'C'    # must be C to indicate 'C'ompass
 
 ## Creates a dictionary of images that reflect the position of the needle
-## to be shown on the micro:bit display.  The key is used to determine the
-## required angle to Magnetic North from the current position as determined by
-## the bearing reading of the built-in magnetometer.
+## to be shown on the micro:bit display.  The key is used to determine how
+## many positions the angle to Magnetic North is from the current position,
+## as determined by the bearing reading of the built-in magnetometer.
 ## NOTE: since decimal numbers can be problematic in computer representation,
-## we have rounded values down to the nearest integer (and will use this
-## convention for all of our calculations)
+## we use integers that count how many intervals of 22.5 degrees we are from
+## magnetic north, and use this to display the correct compass arm.
 COMPASS = {0 : Image("00900:00900:00900:00000:00000"),
-           22 : Image("00090:00090:00900:00000:00000"),
-           45 : Image("00009:00090:00900:00000:00000"),
-           67 : Image("00000:00099:00900:00000:00000"),
-           90 : Image("00000:00000:00999:00000:00000"),
-           112 : Image("00000:00000:00900:00099:00000"),
-           135 : Image("00000:00000:00900:00090:00009"),
-           157 : Image("00000:00000:00900:00090:00090"),
-           180 : Image("00000:00000:00900:00900:00900"),
-           202 : Image("00000:00000:00900:09000:09000"),
-           225 : Image("00000:00000:00900:09000:90000"),
-           247 : Image("00000:00000:00900:99000:00000"),
-           270 : Image("00000:00000:99900:00000:00000"),
-           292 : Image("00000:99000:00900:00000:00000"),
-           315 : Image("90000:09000:00900:00000:00000"),
-           337 : Image("09000:09000:00900:00000:00000")
+           1 : Image("00090:00090:00900:00000:00000"),
+           2 : Image("00009:00090:00900:00000:00000"),
+           3 : Image("00000:00099:00900:00000:00000"),
+           4 : Image("00000:00000:00999:00000:00000"),
+           5 : Image("00000:00000:00900:00099:00000"),
+           6 : Image("00000:00000:00900:00090:00009"),
+           7 : Image("00000:00000:00900:00090:00090"),
+           8 : Image("00000:00000:00900:00900:00900"),
+           9 : Image("00000:00000:00900:09000:09000"),
+           10 : Image("00000:00000:00900:09000:90000"),
+           11 : Image("00000:00000:00900:99000:00000"),
+           12 : Image("00000:00000:99900:00000:00000"),
+           13 : Image("00000:99000:00900:00000:00000"),
+           14 : Image("90000:09000:00900:00000:00000"),
+           15 : Image("09000:09000:00900:00000:00000")
            }
 
 ## create a list that will track the checkpoints in the order they are visited
@@ -125,50 +126,52 @@ while True:
     # get a bearing to North.
     north_bearing = 11 - compass.heading()
     ## We now need to convert this into one of the values in our COMPASS
-    ## dictionary.  To do this, we first divide by 22.5, which is our angle
+    ## dictionary.  To do this, we divide by 22.5, which is our angle
     ## between each of our displayable compass points. This tells us how many
     ## multiples of 22.5 we are from North, and we round this down to the
-    ## nearest integer by converting using the int() function
-    points_from_north = int(north_bearing / 22.5)
-    ## Now, we multiply this value by 22.5, and once again round it down to
-    ## match one of our values in the COMPASS dictionary
-    pos = int(points_from_north * 22.5)
+    ## nearest integer by using the integer division (//) and converting
+    ## to int(). We then use modulus arithmetic to convert it to a positive
+    ## value between 0 and 15 by finding % 16
+    points_from_north = int((north_bearing // 22.5) % 16)
     ## Point the needle to the nearest "cardinal point" bearing towards
     ## Magnetic North by displaying the correct image from our dictionary
-    display.show(COMPASS[pos])
+    display.show(COMPASS[points_from_north])
     ## Pause momentarily before getting another reading
     sleep(100)
   ## once we enter checking mode, we'll begin looking for a radio signal from
   ## a nearby checkpoint
   elif mode == "checking":
     ## attempt to catch any messages being sent from nearby checkpoints
-    checkpoint = radio.receive()
-    if checkpoint:
-      ## before we do anything, we need to check to see if this checkpoint is
-      ## on our course.  We begin by extracting the first character from the
-      ## message we received and comparing that to our course
-      checkpoint_course = checkpoint[0]
-      if checkpoint_course == MY_COURSE:
-        ## if this checkpoint is on our course, then we need to get the
-        ## checkpoints id from its message, which is every everything after the
-        ## first character (i.e. everything in the message from index 1 onwards)
-        checkpoint_id = checkpoint[1:]
-        ## we then show the relevant image by looking it up in our images
-        ## dictionary
-        display.show(images[checkpoint_id])
-        ## Next, we see if we have recorded this checkpoint before and, if we
-        ## haven't already stored its id in our list of checkpoints, we add it
-        if checkpoint_id not in checkpoints:
-          checkpoints.append(checkpoint_id)
-          ## Once we've added the checkpoint into our list of visited
-          ## checkpoints, send a message to the checkpoint to indicate which
-          ## course we are doing and what our id is so it can store this
-          ## information.  We send a message containing our id, prepended with
-          # the course we are currently doing.
-          radio.send(MY_COURSE+MY_ID)
+    message = radio.receive()
+    if message:
+      ## before we do anything, we need to check to see if this message came
+      ## from a checkpoint (it may be a broadcast from a nearby compass)
+      message_type = message[0]
+      if message_type == 'F':
+        ## Now, check that it is on our course.  The second character from the
+        ## message is the checkpoint's course - compare that to ours
+        checkpoint_course = message[1]
+        if checkpoint_course == MY_COURSE:
+          ## if this checkpoint is on our course, then we need to get the
+          ## checkpoints id from its message, which is every everything after the
+          ## second character (i.e. everything in the message from index 2 onwards)
+          checkpoint_id = message[2:]
+          ## we then show the relevant image by looking it up in our images
+          ## dictionary
+          display.show(images[checkpoint_id])
+          ## Next, we see if we have recorded this checkpoint before and, if we
+          ## haven't already stored its id in our list of checkpoints, we add it
+          if checkpoint_id not in checkpoints:
+            checkpoints.append(checkpoint_id)
+            ## Once we've added the checkpoint into our list of visited
+            ## checkpoints, send a message to the checkpoint to indicate which
+            ## course we are doing and what our id is so it can store this
+            ## information.  We send a message containing our id, prepended with
+            # the course we are currently doing and the fact we are a compass.
+            radio.send(MY_TYPE+MY_COURSE+MY_ID)
     ## pause for a moment so we don't spam the radio signals in the area
-    ##  too much
-    sleep(200)
+    ## too much
+    sleep(100)
   ## in showing mode, we iterate over the checkpoints we've saved and display
   ## them one at a time, for one second each.  This preserves the order they
   ## were visited / saved
